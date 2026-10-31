@@ -215,3 +215,23 @@ cargo ndk -t arm64-v8a -o app/src/main/jniLibs \
   build --manifest-path ../../apps/photocraft-android/Cargo.toml
 ./gradlew installDebug
 ```
+
+## Pulling upstream updates
+
+This clone keeps the original project at `upstream` and this Android port at `origin`
+(`https://github.com/aminghaseminia/photocraft-android`):
+
+```sh
+git fetch upstream
+git rebase upstream/main
+git push
+```
+
+`pull.rebase` is set for this clone, so `git pull upstream main` rebases instead of merging. The
+files both sides touch are `Cargo.toml`, `Cargo.lock` and `xtask/src/layers.rs` (the new crates'
+entries); resolve those, then rerun the Android build and reinstall. A fresh clone needs the remote
+again:
+
+```sh
+git remote add upstream https://github.com/storytold/photocraft
+```
