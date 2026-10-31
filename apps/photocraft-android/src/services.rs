@@ -43,6 +43,31 @@ enum Kind {
 /// One picker at a time (the UI enforces that too).
 static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
 
+/// URIs the save picker returned. The app appends the format's extension to the document path
+/// (`…/document/1297` becomes `…/document/1297.psd`), but the Storage Access Framework granted
+/// access to the URI *without* it. [`base_uri`] maps the document path back to the granted URI.
+static SAVED_URIS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn remember_saved_uri(uri: &str) {
+    let mut saved = SAVED_URIS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !saved.iter().any(|known| known == uri) {
+        if saved.len() >= 64 {
+            saved.remove(0);
+        }
+        saved.push(uri.to_string());
+    }
+}
+
+/// The granted URI behind a document path the app may have given an extension.
+fn base_uri(path: &str) -> String {
+    let saved = SAVED_URIS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    saved
+        .iter()
+        .find(|uri| path == uri.as_str() || path.strip_prefix(uri.as_str()).is_some_and(|rest| rest.starts_with('.')))
+        .cloned()
+        .unwrap_or_else(|| path.to_string())
+}
+
 fn pending() -> MutexGuard<'static, Option<Pending>> {
     PENDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
@@ -104,6 +129,7 @@ fn poll() -> Vec<OsEvent> {
             Some(("save", uri)) => {
                 if let Some(pending) = take_pending() {
                     debug_assert_eq!(pending.kind, Kind::Save);
+                    remember_saved_uri(uri);
                     pending.reply.send(Some(FileDialogAnswer::SaveTo(uri.to_string())));
                 }
             }
@@ -175,7 +201,8 @@ fn name_from_uri(uri: &str) -> String {
 /// Ask the provider for the display name the create-document picker was given.
 fn export_name(path: &str) -> String {
     if path.starts_with("content://") {
-        if let Ok(name) = bridge::document_name(path) {
+        let uri = base_uri(path);
+        if let Ok(name) = bridge::document_name(&uri) {
             if !name.is_empty() {
                 return name;
             }
@@ -195,7 +222,7 @@ fn export(doc: &photocraft_doc::Document, path: &str, settings: &photocraft_ui_e
 
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     if path.starts_with("content://") {
-        return bridge::write_all(path, bytes);
+        return bridge::write_all(&base_uri(path), bytes);
     }
     photocraft_format::atomic_write(Path::new(path), bytes).map_err(|error| error.to_string())
 }
@@ -228,10 +255,17 @@ fn save_through(
     let cancelled = || ctl.check().is_err();
     let progress = |fraction: f32| ctl.progress(fraction * ENCODE_SHARE, "");
     let interrupt = photocraft_raster::Interrupt::new(&cancelled, &progress);
-    let result = photocraft_io::export_with(doc, &name, &options, &interrupt).map_err(|error| error.to_string())?;
+    let result = photocraft_io::export_with(doc, &name, &options, &interrupt).map_err(|error| {
+        log::error!("save: export failed for {name:?}: {error}");
+        error.to_string()
+    })?;
+    log::info!("save: encoded {} bytes for {name:?}", result.bytes.len());
     ctl.commit()?;
     ctl.progress(ENCODE_SHARE, "Writing");
-    write(path, &result.bytes, &|fraction| ctl.progress(ENCODE_SHARE + (0.99 - ENCODE_SHARE) * fraction, ""))?;
+    write(path, &result.bytes, &|fraction| ctl.progress(ENCODE_SHARE + (0.99 - ENCODE_SHARE) * fraction, "")).map_err(|error| {
+        log::error!("save: write failed for {path}: {error}");
+        error
+    })?;
     ctl.progress(1.0, "");
     Ok(result.warnings)
 }
@@ -245,7 +279,7 @@ fn save_file(
     save_through(doc, path, settings, ctl, |path, bytes, progress| {
         if path.starts_with("content://") {
             progress(1.0);
-            bridge::write_all(path, bytes)
+            bridge::write_all(&base_uri(path), bytes)
         } else {
             photocraft_format::atomic_write_progress(Path::new(path), bytes, progress).map_err(|error| error.to_string())
         }
@@ -306,8 +340,8 @@ pub fn services() -> Services {
         save_file: Some(Arc::new(save_file)),
         file_dialog: Some(Box::new(show_file_dialog)),
         write: Some(Box::new(write)),
-        // Two URI strings name the same document only when they are equal.
-        same_file: Some(Box::new(|a, b| a == b)),
+        // Two URIs name the same document only when they map to the same granted URI.
+        same_file: Some(Box::new(|a, b| base_uri(a) == base_uri(b))),
         encode_png: Some(Box::new(encode_png)),
         open_url: Some(Box::new(|url| bridge::open_url(url))),
         os_events: Some(Box::new(poll)),

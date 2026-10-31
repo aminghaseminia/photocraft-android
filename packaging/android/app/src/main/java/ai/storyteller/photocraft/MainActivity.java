@@ -133,10 +133,6 @@ public class MainActivity extends GameActivity {
 
     // ---- Called from Rust over JNI. -------------------------------------------------------------
 
-    public String photocraftFilesDir() {
-        return getFilesDir().getAbsolutePath();
-    }
-
     public void photocraftOpenDocuments(boolean multiple) {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);

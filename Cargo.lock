@@ -5077,6 +5077,7 @@ dependencies = [
 name = "photocraft-android-jni"
 version = "0.18.0"
 dependencies = [
+ "android-activity",
  "jni",
  "ndk-context",
 ]

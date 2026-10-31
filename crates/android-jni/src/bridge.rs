@@ -10,8 +10,34 @@
 //! stores the result and [`take_result`] drains it once per frame from `Services::os_events`.
 //! That keeps this crate free of exported JNI functions and their name mangling.
 
-use jni::objects::{JByteArray, JObject, JString};
+use std::sync::Mutex;
+
+use jni::objects::{Global, JByteArray, JObject, JString};
 use jni::{Env, JValue, JavaVM, jni_sig, jni_str};
+
+/// The Activity, kept as a global reference.
+///
+/// `ndk-context` publishes the **Application** (android-activity initializes it from
+/// `get_application`), which has `getFilesDir()` but none of the `photocraft*` methods. The
+/// Activity comes from `android_on_create`, which runs on the Java main thread before
+/// `android_main`.
+static ACTIVITY: Mutex<Option<Global<JObject<'static>>>> = Mutex::new(None);
+
+/// Captures the Activity for [`activity`]. Optional for the app: android-activity calls it when the
+/// symbol exists. It may run again if the Activity is recreated.
+#[unsafe(no_mangle)]
+fn android_on_create(state: &android_activity::OnCreateState) {
+    let vm = unsafe { JavaVM::from_raw(state.vm_as_ptr().cast()) };
+    let raw = state.activity_as_ptr() as jni::sys::jobject;
+    let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        // SAFETY: android-activity owns this global reference for the duration of the callback.
+        let activity = unsafe { JObject::from_raw(env, raw) };
+        let global = env.new_global_ref(activity)?;
+        let mut slot = ACTIVITY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        *slot = Some(global);
+        Ok(())
+    });
+}
 
 /// Makes the process's `JavaVM` available to the `jni` crate. `android-activity` initialized
 /// `ndk-context` before `android_main`, so both pointers are valid for the app's lifetime.
@@ -23,14 +49,16 @@ pub fn init() -> Result<(), String> {
     Ok(())
 }
 
-/// The activity, for the duration of one JNI call.
-///
-/// `ndk-context` keeps a global reference to it until the activity is destroyed, which happens
-/// after `android_main` returns.
+/// The activity, for the duration of one JNI call. A null object (before `android_on_create`, or
+/// after the activity is destroyed) makes the JNI call fail with a clear error.
 fn activity<'local>(env: &Env<'local>) -> JObject<'local> {
-    let context = ndk_context::android_context();
-    // SAFETY: see above; the global reference keeps the object alive.
-    unsafe { JObject::from_raw(env, context.context().cast()) }
+    let slot = ACTIVITY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    match slot.as_ref() {
+        // SAFETY: the `Global` keeps the reference alive for as long as this slot holds it; the
+        // wrapper does not delete it.
+        Some(global) => unsafe { JObject::from_raw(env, global.as_obj().as_raw()) },
+        None => JObject::null(),
+    }
 }
 
 /// The app's private files directory (`Context.getFilesDir()`), where preferences live.
@@ -38,8 +66,10 @@ pub fn files_dir() -> Result<String, String> {
     let vm = JavaVM::singleton().map_err(|error| error.to_string())?;
     vm.attach_current_thread(|env| {
         let activity = activity(env);
-        let value = env.call_method(&activity, jni_str!("photocraftFilesDir"), jni_sig!("()Ljava/lang/String;"), &[])?;
-        let string: JString = env.cast_local::<JString>(value.l()?)?;
+        let value = env.call_method(&activity, jni_str!("getFilesDir"), jni_sig!("()Ljava/io/File;"), &[])?;
+        let file = value.l()?;
+        let path = env.call_method(&file, jni_str!("getAbsolutePath"), jni_sig!("()Ljava/lang/String;"), &[])?;
+        let string: JString = env.cast_local::<JString>(path.l()?)?;
         string.try_to_string(env)
     })
     .map_err(|error| error.to_string())

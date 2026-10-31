@@ -25,3 +25,5 @@ todo = "warn"
 # Same version as `android-activity` (via winit), so the `JavaVM` singleton is shared.
 jni = "0.22"
 ndk-context = "0.1"
+# `android_on_create` gives us the real Activity (ndk-context only publishes the Application).
+android-activity = { version = "0.6", default-features = false, features = ["game-activity"] }
