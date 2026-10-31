@@ -1,0 +1,10 @@
+<resources>
+    <!-- The editor draws the whole screen itself; there is no action bar or system window frame. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:colorAccent">#4B9FD5</item>
+    </style>
+</resources>

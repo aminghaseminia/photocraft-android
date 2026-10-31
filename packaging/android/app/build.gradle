@@ -1,0 +1,51 @@
+// Android application module for PhotoCraft. The Rust cdylib is built by cargo-ndk into
+// app/src/main/jniLibs (see ../README.md); Gradle only packages it.
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ai.storyteller.photocraft'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "ai.storyteller.photocraft"
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName "0.18.0"
+        ndk {
+            // The test device is a 64-bit ARM phone; no emulator image is installed.
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs {
+            // Uncompressed and page-aligned native libraries (Android 15's 16 KB pages).
+            useLegacyPackaging = false
+        }
+    }
+}
+
+dependencies {
+    // games-activity and appcompat pull different Kotlin stdlib versions; the BOM aligns them
+    // (kotlin-stdlib-jdk7/jdk8 are empty shims from Kotlin 1.8 on, so no duplicate classes).
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.9.24')
+    // WindowCompat / WindowInsetsControllerCompat for drawing behind the system bars.
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    // GameActivity, the activity base class android-activity's game-activity backend drives.
+    implementation 'androidx.games:games-activity:4.4.0'
+}

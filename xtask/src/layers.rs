@@ -46,8 +46,11 @@ pub const TABLE: &[(&str, Class)] = &[
     ("raw", Class::Standalone),
     ("affinity", Class::Standalone),
     ("adobe-assets", Class::Standalone),
-    // Pen tablet input (the one isolated `unsafe` helper: AppKit interop on macOS).
+    // Pen tablet input (the first isolated `unsafe` helper: AppKit interop on macOS).
     ("tablet", Class::Standalone),
+    // Android JNI between the android app shell and its MainActivity (the second isolated
+    // `unsafe` helper: raw JavaVM/jobject handles; everything else stays `unsafe_code = "forbid"`).
+    ("android-jni", Class::Standalone),
     ("doc", Class::Layer(1)),
     ("ops", Class::Layer(2)),
     ("paint", Class::Layer(2)),
@@ -72,6 +75,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
     ("web-boot", Class::Exempt),
+    // Android shell (GameActivity): the same UI and engine with a JNI/Services implementation.
+    ("android", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
 

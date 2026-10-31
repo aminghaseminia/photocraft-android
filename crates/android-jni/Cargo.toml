@@ -1,0 +1,27 @@
+[package]
+name = "photocraft-android-jni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Safe wrapper around the JNI calls PhotoCraft's Android shell needs (an isolated unsafe helper crate)"
+
+# The second isolated `unsafe` helper crate (see AGENTS.md, Never crash): JNI hands the app raw
+# `JavaVM` and `jobject` pointers, and `jni`'s own constructors for them are `unsafe`. Only
+# `src/bridge.rs` allows `unsafe`; every block carries a `SAFETY:` comment, the public API is
+# entirely safe, and every other crate keeps the workspace's `unsafe_code = "forbid"`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+cognitive_complexity = "deny"
+too_many_arguments = "deny"
+wildcard_imports = "deny"
+dbg_macro = "warn"
+todo = "warn"
+
+# Everything is Android-only, so host builds of the workspace see an empty crate (the Android
+# shell is the only consumer).
+[target.'cfg(target_os = "android")'.dependencies]
+# Same version as `android-activity` (via winit), so the `JavaVM` singleton is shared.
+jni = "0.22"
+ndk-context = "0.1"

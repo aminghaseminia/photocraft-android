@@ -1,0 +1,48 @@
+[package]
+name = "photocraft-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PhotoCraft for Android (GameActivity + wgpu shell)"
+publish = false
+
+# The only `unsafe` here is the `#[unsafe(no_mangle)]` entry point that GameActivity's glue looks
+# up (src/entry.rs). All JNI pointer work lives in `photocraft-android-jni`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+cognitive_complexity = "deny"
+too_many_arguments = "deny"
+wildcard_imports = "deny"
+dbg_macro = "warn"
+todo = "warn"
+
+[lib]
+name = "photocraft_android"
+crate-type = ["cdylib"]
+
+[features]
+# Open HEIC/HEIF photos, like the desktop and web apps.
+heif = ["photocraft-codecs/heif", "photocraft-io/heif"]
+
+# Everything is target-gated so `cargo clippy --workspace` on Linux/macOS sees an empty crate
+# instead of trying to build a desktop winit backend (there is no host UI in this shell).
+[target.'cfg(target_os = "android")'.dependencies]
+photocraft-engine = { workspace = true }
+photocraft-doc = { workspace = true }
+photocraft-io = { workspace = true }
+photocraft-codecs = { workspace = true }
+photocraft-format = { workspace = true }
+photocraft-raster = { workspace = true }
+photocraft-ui-egui = { workspace = true }
+photocraft-android-jni = { workspace = true }
+# The UI crate already enables `wgpu`, `accesskit` and `clipboard`; `android-game-activity` is
+# required because accesskit does not support the native-activity backend.
+eframe = { workspace = true, features = ["wgpu", "accesskit", "clipboard", "android-game-activity"] }
+egui = { workspace = true }
+log = { workspace = true }
+# Logs to logcat (filter: `adb logcat photocraft:V *:S`).
+android_logger = { version = "0.15", default-features = false }
+# Only for `AndroidApp` in the entry point; the backend feature comes from eframe.
+winit = { version = "=0.30.13", default-features = false }
