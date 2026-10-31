@@ -45,6 +45,14 @@ Rough effort for one experienced Rust + Android developer, full time:
 - Safe-area insets and IME insets (winit has no API; system bars are hidden instead).
 - Folder pickers, printing, display profiles, update checks, the control/MCP server.
 - Path-based siblings for linked smart objects (content URIs only).
+- The tab title shows the document id part of the URI (for example `1299.psd`) rather than the
+  display name the picker was given; `Services` carries a path, not a separate title.
+
+Verified on a Xiaomi 2406APNFAG (Android 15, arm64): launch, landscape UI, File › Open through the
+SAF picker, import, and Save As writing a 14.2 MB PSD back to the content URI. Save As needed two
+fixes: reading the format from the extension the app appends to the document path (the provider may
+also deduplicate a name as `foo.psd (1)`, with the suffix *after* the extension), and mapping that
+path back to the URI SAF actually granted.
 
 ### A note on `unsafe`
 

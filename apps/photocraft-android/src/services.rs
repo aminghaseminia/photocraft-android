@@ -197,14 +197,41 @@ fn name_from_uri(uri: &str) -> String {
     uri.rsplit('/').next().filter(|name| !name.is_empty()).unwrap_or("document").to_string()
 }
 
+/// Extensions `photocraft_io::export` understands. The app appends the chosen format's extension
+/// to the document path, which makes the path the format's source of truth.
+const EXPORT_EXTS: &[&str] = &[
+    "psd", "psb", "pdf", "pcraft", "ora", "png", "jpg", "jpeg", "jxl", "webp", "tif", "tiff", "tga", "bmp", "dib", "gif", "ico", "exr", "pnm", "hdr", "fits",
+    "dpx", "dds", "cin", "iff",
+];
+
+fn has_export_ext(path: &str) -> bool {
+    Path::new(path).extension().and_then(|ext| ext.to_str()).is_some_and(|ext| EXPORT_EXTS.iter().any(|known| known.eq_ignore_ascii_case(ext)))
+}
+
+/// `foo.psd (1)`: the provider's way of not overwriting an existing document. The suffix sits
+/// after the extension, so the format must be read before it.
+fn strip_copy_suffix(name: &str) -> &str {
+    if let Some(open) = name.rfind(" (") {
+        if name.ends_with(')') && name[open + 2..name.len() - 1].chars().all(|c| c.is_ascii_digit()) {
+            return &name[..open];
+        }
+    }
+    name
+}
+
 /// The export's format comes from the file name's extension, and a `content://` URI has none.
 /// Ask the provider for the display name the create-document picker was given.
 fn export_name(path: &str) -> String {
     if path.starts_with("content://") {
+        // The app appends the format's extension (`.psd`, `.png`, …) to the document path.
+        if has_export_ext(path) {
+            return path.to_string();
+        }
         let uri = base_uri(path);
         if let Ok(name) = bridge::document_name(&uri) {
+            let name = strip_copy_suffix(&name);
             if !name.is_empty() {
-                return name;
+                return name.to_string();
             }
         }
     }
